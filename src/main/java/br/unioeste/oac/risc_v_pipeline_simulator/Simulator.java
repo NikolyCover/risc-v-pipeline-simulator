@@ -10,8 +10,12 @@ class Simulator {
     private Map<Integer, Integer> memory = new HashMap<>();
     private int PC = 0;
 
+    // registradores do pipeline
     private Instruction IFIDIR = null, IDEXIR = null, EXMEMIR = null, MEMWBIR = null;
-    private int IDEXA, IDEXB, EXMEMALUOut, MEMWBValue;
+    private int IDEXA, IDEXB, EXMEMB, EXMEMALUOut, MEMWBValue;
+
+    // Registradores para armazenar os índices das instruções (somente para facilitar o entendimento)
+    private int IFIDIndex = -1, IDEXIndex = -1, EXMEMIndex = -1, MEMWBIndex = -1;
 
     void run(Instruction[] instructions) {
         initPipeline();
@@ -26,7 +30,7 @@ class Simulator {
             instructionDecode();
             instructionFetch(instructions);
 
-            printState();
+            printCycleState();
         }
     }
 
@@ -39,19 +43,20 @@ class Simulator {
     private void instructionFetch(Instruction[] instructions) {
         if (PC / 4 < instructions.length) {
             IFIDIR = instructions[PC / 4];
-            printStage("Buscando", IFIDIR);
+            IFIDIndex = PC / 4;
+            printStage("Buscando", IFIDIR, IFIDIndex);
         } else {
             IFIDIR = null;
         }
         PC += 4;
     }
 
-    //TODO
     private void instructionDecode() {
         IDEXIR = IFIDIR;
+        IDEXIndex = IFIDIndex;
 
         if (IDEXIR != null) {
-            printStage("Decodificando", IDEXIR);
+            printStage("Decodificando", IDEXIR, IDEXIndex);
             IDEXA = registers[IDEXIR.rs1];
             IDEXB = registers[IDEXIR.rs2];
         }
@@ -59,27 +64,29 @@ class Simulator {
 
     private void execute() {
         EXMEMIR = IDEXIR;
+        EXMEMB = IDEXB;
+        EXMEMIndex = IDEXIndex;
 
         if (EXMEMIR != null) {
-            printStage("Executando", EXMEMIR);
+            printStage("Executando", EXMEMIR, EXMEMIndex);
 
             switch (EXMEMIR.type) {
                 case R:
-                    if ("add".equals(EXMEMIR.operation)) {
+                    if (Instruction.Operation.ADD == EXMEMIR.operation) {
                         EXMEMALUOut = IDEXA + IDEXB;
-                    } else if ("sub".equals(EXMEMIR.operation)) {
+                    } else if (Instruction.Operation.SUB == (EXMEMIR.operation)) {
                         EXMEMALUOut = IDEXA - IDEXB;
                     }
                     break;
 
                 case I:
-                    if ("lw".equals(EXMEMIR.operation)) {
+                    if (Instruction.Operation.LW ==(EXMEMIR.operation)) {
                         EXMEMALUOut = IDEXA + EXMEMIR.immediate;
                     }
                     break;
 
                 case S:
-                    if ("sw".equals(EXMEMIR.operation)) {
+                    if (Instruction.Operation.SW == (EXMEMIR.operation)) {
                         EXMEMALUOut = IDEXA + EXMEMIR.immediate;
                     }
                     break;
@@ -89,14 +96,15 @@ class Simulator {
 
     private void memoryAccess() {
         MEMWBIR = EXMEMIR;
+        MEMWBIndex = EXMEMIndex;
 
         if (MEMWBIR != null) {
-            printStage("Acessando memória", MEMWBIR);
+            printStage("Acessando memória", MEMWBIR, MEMWBIndex);
 
-            if (MEMWBIR.type == Instruction.Type.I && "lw".equals(MEMWBIR.operation)) {
+            if (MEMWBIR.type == Instruction.Type.I && Instruction.Operation.LW == (MEMWBIR.operation)) {
                 MEMWBValue = memory.getOrDefault(EXMEMALUOut, 0);
-            } else if (MEMWBIR.type == Instruction.Type.S && "sw".equals(MEMWBIR.operation)) {
-                memory.put(EXMEMALUOut, IDEXB);
+            } else if (MEMWBIR.type == Instruction.Type.S && Instruction.Operation.SW == (MEMWBIR.operation)) {
+                memory.put(EXMEMALUOut, EXMEMB);
             } else {
                 MEMWBValue = EXMEMALUOut;
             }
@@ -106,7 +114,7 @@ class Simulator {
     private void writeBack() {
         if (MEMWBIR != null) {
 
-            printStage("Escrevendo", MEMWBIR);
+            printStage("Escrevendo", MEMWBIR, MEMWBIndex);
 
             if (MEMWBIR.type == Instruction.Type.R || MEMWBIR.type == Instruction.Type.I) {
                 registers[MEMWBIR.rd] = MEMWBValue;
@@ -115,11 +123,12 @@ class Simulator {
     }
 
     private void printCycleHeader(int cycle) {
-        System.out.println("CICLO " + cycle + ":\n");
+        System.out.println("CICLO " + (cycle + 1) + ":\n");
     }
 
-    private void printState() {
-        System.out.println("Registradores:");
+    private void printCycleState() {
+        System.out.println("PC:" + PC);
+        System.out.println("\nRegistradores:");
         for (int i = 0; i < 32; i++) {
             System.out.printf("x%-3d", i);
         }
@@ -131,7 +140,7 @@ class Simulator {
         System.out.println("------------------------------------------------------------------------------------------------------------------------------------\n");
     }
 
-    private void printStage(String stage, Instruction instruction) {
-        System.out.println(stage + " instrução " + (PC / 4) + " (" + instruction.operation + ")" + "\n");
+    private void printStage(String stage, Instruction instruction, int instructionIndex) {
+        System.out.println(stage + " instrução " + (instructionIndex + 1) + " (" + instruction.operation + ")" + "\n");
     }
 }
